@@ -12,8 +12,6 @@ case object TLBusDelayProbability extends Field[Double](0.0)
 trait TLBusParams {
   val beatBytes: Int
   val blockBytes: Int
-  val masterBuffering: BufferParams
-  val slaveBuffering: BufferParams
 
   def beatBits: Int = beatBytes * 8
   def blockBits: Int = blockBytes * 8
@@ -26,8 +24,6 @@ abstract class TLBusWrapper(params: TLBusParams, val busName: String)(implicit p
 
   val beatBytes = params.beatBytes
   val blockBytes = params.blockBytes
-  val masterBuffering = params.masterBuffering
-  val slaveBuffering = params.slaveBuffering
   require(blockBytes % beatBytes == 0)
   private val delayProb = p(TLBusDelayProbability)
 
@@ -82,4 +78,19 @@ abstract class TLBusWrapper(params: TLBusParams, val busName: String)(implicit p
 
   def toFixedWidthPorts: TLOutwardNode = outwardWWNode // TODO, do/don't buffer here; knowing we will after the necessary port conversions
 
+  protected def to(name: String)(gen: AdaptingTo) {
+    this {
+      LazyScope(s"${busName}To${name}") {
+        gen(p) :*= outwardNode
+      }
+    }
+  }
+
+  protected def from(name: String)(gen: AdaptingFrom) {
+    this {
+      LazyScope(s"${busName}From${name}") {
+        inwardNode :=* gen(p)
+      }
+    }
+  }
 }

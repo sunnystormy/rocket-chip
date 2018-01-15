@@ -118,4 +118,14 @@ object TLFIFOFixer
     val fixer = LazyModule(new TLFIFOFixer(policy))
     fixer.node
   }
+
+  def from(policy: Policy = all)(gen: TLAdaptingFrom): TLAdapatingFrom =
+  {
+    implicit p => apply(policy)(p) :=* gen(p)
+  }
+
+  def to(policy: Policy = all)(gen: TLAdaptingTo): TLAdapatingTo =
+  {
+    implicit p => gen(p) :*= apply(policy)(p)
+  }
 }

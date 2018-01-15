@@ -140,3 +140,24 @@ class TLSplitter(policy: TLArbiter.Policy = TLArbiter.roundRobin)(implicit p: Pa
     }
   }
 }
+
+object TLSplitter
+{
+  import TLArbiter._
+
+  def apply(policy: Policy = roundRobin)(implicit p: Parameters): TLNode =
+  {
+    val splitter = LazyModule(new TLSplitter(policy))
+    splitter.node
+  }
+
+  def from(policy: Policy = roundRobin)(gen: TLAdaptingFrom): TLAdapatingFrom =
+  {
+    implicit p => apply(policy)(p) :=* gen(p)
+  }
+
+  def to(policy: Policy = roundRobin)(gen: TLAdaptingTo): TLAdapatingTo =
+  {
+    implicit p => gen(p) :*= apply(policy)(p)
+  }
+}

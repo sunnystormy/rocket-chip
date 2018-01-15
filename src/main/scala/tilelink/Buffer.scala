@@ -70,9 +70,29 @@ object TLBuffer
     buffer.node
   }
 
+  def from(abcde: BufferParamst)(gen: TLAdaptingFrom): TLAdapatingFrom =
+  {
+    implicit p => apply(abcde)(p) :=* gen(p)
+  }
+
+  def to(abcde: BufferParams)(gen: TLAdaptingTo): TLAdapatingTo =
+  {
+    implicit p => gen(p) :*= apply(abcde)(p)
+  }
+
   def chain(depth: Int, name: Option[String] = None)(implicit p: Parameters): Seq[TLNode] = {
     val buffers = Seq.fill(depth) { LazyModule(new TLBuffer()) }
     name.foreach { n => buffers.zipWithIndex.foreach { case (b, i) => b.suggestName(s"${n}_${i}") } }
     buffers.map(_.node)
+  }
+
+  def from(depth: Int)(gen: TLAdaptingFrom): TLAdapatingFrom =
+  {
+    implicit p => chain(depth)(p).foldRight(gen(p))(_ :=* _)
+  }
+
+  def to(depth: Int)(gen: TLAdaptingTo): TLAdapatingTo =
+  {
+    implicit p => chain(depth)(p).foldLeft(gen(p))(_ :*= _)
   }
 }

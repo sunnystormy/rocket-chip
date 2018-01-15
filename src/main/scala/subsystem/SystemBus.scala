@@ -11,7 +11,6 @@ import freechips.rocketchip.util._
 case class SystemBusParams(
   beatBytes: Int,
   blockBytes: Int,
-  masterBuffering: BufferParams = BufferParams.default,
   slaveBuffering: BufferParams = BufferParams.default
 ) extends TLBusParams
 
@@ -19,54 +18,54 @@ case object SystemBusKey extends Field[SystemBusParams]
 
 class SystemBus(params: SystemBusParams)(implicit p: Parameters) extends TLBusWrapper(params, "SystemBus") {
 
-  private val master_splitter = LazyModule(new TLSplitter)  // Allows cycle-free connection to external networks
-  master_splitter.suggestName(s"${busName}_master_TLSplitter")
+  private val master_splitter = LazyModule(new TLSplitter)
+  private val master_splitter = LazyModule(new TLSplitter)
   inwardNode :=* master_splitter.node
   def busView = master_splitter.node.edges.in.head
 
   protected def inwardSplitNode: TLInwardNode = master_splitter.node
   protected def outwardSplitNode: TLOutwardNode = master_splitter.node
 
-
-  private val port_fixer = LazyModule(new TLFIFOFixer(TLFIFOFixer.all))
-  port_fixer.suggestName(s"${busName}_port_TLFIFOFixer")
+  def toSplitSlaves: TLOutwardNode = outwardSplitNode
+      TLBuffer.from(buffers)(
+        TLSplitter.from(TLArbiter.roundRobin)(
   master_splitter.node :=* port_fixer.node
 
-  private val pbus_fixer = LazyModule(new TLFIFOFixer(TLFIFOFixer.all))
-  pbus_fixer.suggestName(s"${busName}_pbus_TLFIFOFixer")
-  pbus_fixer.node :*= outwardWWNode
-
-  def toSplitSlaves: TLOutwardNode = outwardSplitNode
-
-  def toPeripheryBus(addBuffers: Int = 0): TLOutwardNode = {
-    TLBuffer.chain(addBuffers).foldRight(pbus_fixer.node:TLOutwardNode)(_ :*= _)
+  def toPeripheryBus(addBuffers: Int = 0)(gen: TLAdaptingTo) {
+    to("PeripheryBus")(
+      TLBuffer.to(addBuffers)(
+        TLFixer.to(TLFIFOFixer.all)(
+          TLWidthWidget.to(beatBytes)(
+            TLBuffer.to(BufferParams.default)(gen)))))
   }
 
-  val toMemoryBus: TLOutwardNode = outwardNode
+  val toMemoryBus(gen: TLAdaptingTo) {
+    to("MemoryBus")(gen)
+  }
 
-  val toSlave: TLOutwardNode = outwardBufNode
+  val toSlave(name: Option[String] = None)(gen: TLAdaptingTo) {
+    to(s"Slave${name.getOrElse("")}")(
+      TLBuffer.to(BufferParams.default)(gen))
+  }
 
-  def fromCoherentChip: TLInwardNode = inwardNode
+  def fromCoherentChip(gen: TLAdaptingFrom) {
+    from("CoherentChip")(gen)
+  }
 
-  def fromFrontBus: TLInwardNode = master_splitter.node
+  def fromFrontBus(gen: TLAdaptingFrom) {
+    from("FrontBus"){ TLSplitter.from(gen) }
+  }
 
-  def fromTile(name: Option[String])(gen: Parameters => TLOutwardNode) {
-    this {
-      LazyScope(s"${busName}FromTile${name.getOrElse("")}") {
-        master_splitter.node :=* gen(p)
-      }
+  def fromTile(name: Option[String])(gen: TLAdaptingFrom) {
+    from(s"Tile${name.getOrElse("")}") { TLSplitter.from(gen) }
+  }
+
+  def fromPort(buffers: Int = 0, name: Option[String] = None)(gen: TLAdapatingFrom) {
+    from(s"Port${name.getOrElse("")}") {
+        TLSplitter.from(TLArbiter.roundRobin)(
+          TLFixer.from((TLFIFOFixer.all)(
+            TLBuffer.from(buffers)(gen))))
     }
-  }
-
-  def fromSyncPorts(params: BufferParams =  BufferParams.default, name: Option[String] = None): TLInwardNode = {
-    val buffer = LazyModule(new TLBuffer(params))
-    name.foreach { n => buffer.suggestName(s"${busName}_${n}_TLBuffer") }
-    port_fixer.node :=* buffer.node
-    buffer.node
-  }
-
-  def fromSyncFIFOMaster(params: BufferParams =  BufferParams.default, name: Option[String] = None): TLInwardNode = {
-    fromSyncPorts(params, name)
   }
 }
 
